@@ -2,6 +2,7 @@
 A Pokémon Card Market Price Checker!
 
 ******************************* Summary **************************************************************
+
 Pokebinder is a Python-based console application that helps Pokemon card collectors keep track of their collections and their total binder value. In our case the app is desinged to work with 7-day average from cardmarket.com.
 
 NOTE: This app has NO access to the cardmarket.com's API. 
@@ -25,7 +26,7 @@ Now you can use a blank excel file and the app will create the required columns 
 3. Pokemon Cards
 
 
-************************************************************ Description *********************************
+******************************* Description ****************************************************
 
 Here's how it works:
 
