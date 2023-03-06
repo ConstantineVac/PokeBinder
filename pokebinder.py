@@ -11,12 +11,16 @@ import math
 import openpyxl
 import pyfiglet
 from pyfiglet import Figlet
+import re
+from decimal import Decimal
 
 global df
 global total_cards
+global total_price
 
 df = None
 total_cards = 0
+total_price = 0
 
 #Function1 : Add Cards
 # Option 1: Add new card entry
@@ -25,69 +29,90 @@ def add_cards():
     global df
     global total_cards
 
+       
+    # Get card info from user
     while True:
         try:
             num_cards = int(input("How many duplicates would you like to add? "))
             break
         except ValueError:
             print("Please enter a valid number.")
-        
-    # Get card info from user
     
     while True:
-        card_name = input("Please enter the card name(as written on Card): ").replace('_V',' V')
-        if card_name.isalpha():
+        card_name = input("Please enter the card name (as written on the card): ").strip().replace('_V',' V')
+        if all(c.isalpha() or c.isspace() for c in card_name):
             break
         else:
-            print("Please enter a valid card name containing only letters.")
+            print("Please enter a valid card name containing only letters and spaces.")
         
     while True:
-        set_name = input("Please enter the expansion set(ex.Lost Origin): ")
-        if set_name.isalpha():
+        set_name = input("Please enter the expansion set(ex.Lost Origin): ").strip()
+        if all(s.isalpha() or s.isspace() for s in set_name):
             break
         else:
-            print("Please enter a valid set name containing only letters.")
+            print("Please enter a valid set name containing only letters and spaces.")
 
     while True:    
-        card_version = input("Please enter the card version (ex.V1 or None):")
-        if card_version.isalpha():
+        card_version = input("Please enter the card version (ex.V1 or None):").strip()
+        if card_version.isalnum() and card_version.startswith('V') | card_version.startswith('v'):
+            card_version = card_version.upper()
             break
+        
+        elif card_version == 'None' or card_version == 'NONE' or card_version == 'none':
+            card_version = 'None'
+            break
+        
         else:
             print("Please enter a valid card version")
 
     while True:    
-        set_id = input("Please enter the set ID (ex.LOR): ").upper()
+        set_id = input("Please enter the set ID (ex.LOR): ").strip()
         if set_id.isalpha():
+            set_id = set_id.upper()
             break
+        
         else:
             print("Please enter a valid set ID")
         
     while True:
-        try:    
-            card_number = input("Please enter the card number(ex.131): ")
+        card_number = input("Please enter the card number (up to 3 digits ): ")
+        if re.match("^[0-9]{1,3}$", card_number):
             break
-        except ValueError:
-            print("Please enter a valid number.")
+        
+        else:
+            print("Please enter a valid card number containing max 3 digits.")
         
     # Add new row to DataFrame
     for i in range(num_cards):
-        new_row = {'Card Name': card_name.replace('_V',' V'), 'Expansion Set': set_name.replace(' ','-'), 'Set ID': set_id.upper(), 'Card Version': card_version, 'Set Number': card_number.zfill(3)}
-        df = df.append(new_row, ignore_index=True)
-
-        # Generate URL and add to DataFrame
-        card_version = df.at[df.index[-1], 'Card Version']
-        card_number = df.at[df.index[-1], 'Set Number'].zfill(3)
-        set_id = df.at[df.index[-1], 'Set ID']
-        set_name = df.at[df.index[-1], 'Expansion Set']
-        
-        # Construct cardmarket URL
-        if card_version=='None':
-            card_version_str = ''
-        else:
-            card_version_str = f'{card_version}-'
+        new_rows = [{'Card Name': card_name.replace('_V', ' V'), 'Expansion Set': set_name.replace(' ', '-'), 'Set ID': set_id.upper(), 'Card Version': card_version, 'Set Number': card_number.zfill(3)}]
+        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True,)
+        while True:
+            opt = input(f"({i+1}/{num_cards})Do you want to generate the URL automatically? (y/n)").lower()
             
-        url = f"https://www.cardmarket.com/en/Pokemon/Products/Singles/{set_name}/{card_name.replace(' ', '-')}-{card_version_str}{set_id.replace(' ','')}{card_number}"
-        df.at[df.index[-1], 'URL'] = url
+            if opt == 'y':
+                # Generate URL and add to DataFrame
+                card_version = df.at[df.index[-1], 'Card Version']
+                card_number = str(int(df.at[df.index[-1], 'Set Number'])).zfill(3)
+                set_id = df.at[df.index[-1], 'Set ID']
+                set_name = df.at[df.index[-1], 'Expansion Set']
+        
+                # Construct cardmarket URL
+                if card_version=='None':
+                    card_version_str = ''
+                else:
+                    card_version_str = f'{card_version}-'
+            
+                url = f"https://www.cardmarket.com/en/Pokemon/Products/Singles/{set_name}/{card_name.replace(' ', '-')}-{card_version_str}{set_id.replace(' ','')}{card_number}"
+                df.at[df.index[-1], 'URL'] = url
+                break
+            
+            elif opt == 'n':
+                # ask the user to enter the URL manually
+                url = input(f"Please enter the card URL({i+1}/{num_cards}): ").strip().rstrip('\n')
+                df.at[df.index[-1], 'URL'] = url
+                break
+            else:
+                print("Please enter 'y' or 'n' to choose whether to generate the URL automatically or enter it manually.")
 
     # Save changes to Excel file
     df.to_excel(excel_path, index=False)
@@ -100,10 +125,9 @@ def add_cards():
     last_checked = now.strftime("%Y-%m-%d %H:%M:%S")
     
     if not math.isnan(total_price) and total_price > 0:
-        total_price = df['Price'].sum(skipna=True)
         print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price.round(2)}€')
     else:
-        print(f'Your Binder has in total {total_cards} cards. Run 2 to get a total value !')
+        print(f'Your Binder has in total {total_cards} cards. Run 2 to get an updated total value !')
         
     if total_na_rows > 0:
         print('Warning Missing Prices !')
@@ -126,7 +150,7 @@ def add_cards():
 
 
 
-#Function2 Update Card Prices 
+#Function 2 Update Card Prices 
 #Update Cards Prices using CardMarket's 7-day average!
 def update_card_prices():
     global df
@@ -175,11 +199,12 @@ def update_card_prices():
         print("\nPrices updated successfully!")
     
         total_cards = len(df)
-        total_price = df['Price'].sum(skipna=True)
         total_na_rows = df["Price"].isna().sum()
         now = datetime.now()
         last_checked = now.strftime("%Y-%m-%d %H:%M:%S")
-        print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price.round(2)}€')
+        total_price = df['Price'].sum(skipna=True) 
+        total_price = Decimal(total_price).quantize(Decimal('.01'))
+        print(f'Your Binder has in total {total_cards} cards and its total value now is {total_price}€')
         if total_na_rows > 0:
             print('Warning Missing Prices !')
             if total_na_rows == 1:
@@ -202,48 +227,104 @@ def update_card_prices():
 
 
 
-# Option 3: Add new card entry and update prices
+#Function 3: Add new card entry and update prices
 def both():
     
     global df
     global total_cards
-    num_cards = int(input("How many duplicates would you like to add? "))
     # Get card info from user
-    card_name = input("Please enter the card name(as written on Card): ").replace('_V',' V')
-    set_name = input("Please enter the expansion set(ex.Lost-Origin): ")
-    card_version = input("Please enter the card version (ex.V1):")
-    set_id = input("Please enter the set ID (ex.LOR): ")
-    card_number = input("Please enter the card number(ex.131): ")
+    while True:
+        try:
+            num_cards = int(input("How many duplicates would you like to add? "))
+            break
+        except ValueError:
+            print("Please enter a valid number.")
+    
+    while True:
+        card_name = input("Please enter the card name (as written on the card): ").strip().replace('_V',' V')
+        if all(c.isalpha() or c.isspace() for c in card_name):
+            break
+        else:
+            print("Please enter a valid card name containing only letters and spaces.")
+        
+    while True:
+        set_name = input("Please enter the expansion set(ex.Lost Origin): ").strip()
+        if all(s.isalpha() or s.isspace() for s in set_name):
+            break
+        else:
+            print("Please enter a valid set name containing only letters and spaces.")
 
+    while True:    
+        card_version = input("Please enter the card version (ex.V1 or None):").strip()
+        if card_version.isalnum() and card_version.startswith('V') | card_version.startswith('v'):
+            card_version = card_version.upper()
+            break
+        
+        elif card_version == 'None' or card_version == 'NONE' or card_version == 'none':
+            card_version = 'None'
+            break
+        
+        else:
+            print("Please enter a valid card version")
+
+    while True:    
+        set_id = input("Please enter the set ID (ex.LOR): ").strip()
+        if set_id.isalpha():
+            set_id = set_id.upper()
+            break
+        
+        else:
+            print("Please enter a valid set ID")
+        
+    while True:
+        card_number = input("Please enter the card number (up to 3 digits ): ")
+        if re.match("^[0-9]{1,3}$", card_number):
+            break
+        
+        else:
+            print("Please enter a valid card number containing max 3 digits.")
+        
     # Add new row to DataFrame
     for i in range(num_cards):
-        new_row = {'Card Name': card_name.replace('_V',' V'), 'Expansion Set': set_name.replace(' ','-'), 'Set ID': set_id.upper(), 'Card Version': card_version, 'Set Number': card_number.zfill(3)}
-        df = df.append(new_row, ignore_index=True)
-
-        # Generate URL and add to DataFrame
-        card_version = df.at[df.index[-1], 'Card Version']
-        card_number = df.at[df.index[-1], 'Set Number'].zfill(3)
-        set_id = df.at[df.index[-1], 'Set ID']
-        set_name = df.at[df.index[-1], 'Expansion Set']
-        
-        # Construct cardmarket URL
-        if card_version=='None':
-            card_version_str = ''
-        else:
-            card_version_str = f'{card_version}-'
+        new_rows = [{'Card Name': card_name.replace('_V', ' V'), 'Expansion Set': set_name.replace(' ', '-'), 'Set ID': set_id.upper(), 'Card Version': card_version, 'Set Number': card_number.zfill(3)}]
+        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True,)
+        while True:
+            opt = input(f"({i+1}/{num_cards})Do you want to generate the URL automatically? (y/n)").lower()
             
-        url = f"https://www.cardmarket.com/en/Pokemon/Products/Singles/{set_name}/{card_name.replace(' ', '-')}-{card_version_str}{set_id.replace(' ','')}{card_number}"
-        df.at[df.index[-1], 'URL'] = url
+            if opt == 'y':
+                # Generate URL and add to DataFrame
+                card_version = df.at[df.index[-1], 'Card Version']
+                card_number = str(int(df.at[df.index[-1], 'Set Number'])).zfill(3)
+                set_id = df.at[df.index[-1], 'Set ID']
+                set_name = df.at[df.index[-1], 'Expansion Set']
+        
+                # Construct cardmarket URL
+                if card_version=='None':
+                    card_version_str = ''
+                else:
+                    card_version_str = f'{card_version}-'
+            
+                url = f"https://www.cardmarket.com/en/Pokemon/Products/Singles/{set_name}/{card_name.replace(' ', '-')}-{card_version_str}{set_id.replace(' ','')}{card_number}"
+                df.at[df.index[-1], 'URL'] = url
+                break
+            
+            elif opt == 'n':
+                # ask the user to enter the URL manually
+                url = input(f"Please enter the card URL({i+1}/{num_cards}): ").strip().rstrip('\n')
+                df.at[df.index[-1], 'URL'] = url
+                break
+            else:
+                print("Please enter 'y' or 'n' to choose whether to generate the URL automatically or enter it manually.")
 
     # Save changes to Excel file
     df.to_excel(excel_path, index=False)
     print("\nNew card entry has been added to the Excel file!")
     print("")
-    print("\nCard prices will be updated based on the cardmarket.com 7-day average.")
+    print("\n Now Card prices will be updated based on the cardmarket.com 7-day average.")
     print("")
     print("")
     print("Updating Prices:") 
-    with tqdm(total=total_cards) as pbar:
+    with tqdm(total=total_cards+num_cards) as pbar:
         for index,row in df.iterrows():
             card_name = row['Card Name']
             set_name = row['Expansion Set']
@@ -259,7 +340,7 @@ def both():
             soup = BeautifulSoup(response.content, 'html.parser')
     
             # Find the 'dd' element containing the 7-day average price
-            avg_price_dt = soup.find('dt', text='7-days average price')
+            avg_price_dt = soup.find('dt', string='7-days average price')
             avg_price_dd = avg_price_dt.find_next_sibling('dd')
             price_span = avg_price_dd.find('span')
             avg_7_day_price = price_span.text.strip()
@@ -276,9 +357,10 @@ def both():
             df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             pbar.update(1)
         
-    # Save the updated data back to the Excel file
-    df.to_excel(excel_path, index=False)
-    print("\nPrices updated successfully!")
+        # Save the updated data back to the Excel file
+        df.to_excel(excel_path, index=False)
+        print("\nPrices updated successfully!")
+        
     
     
     #Binder Status Info after the new entries
@@ -287,7 +369,8 @@ def both():
     now = datetime.now()
     last_checked = now.strftime("%Y-%m-%d %H:%M:%S")
     total_price = df['Price'].sum(skipna=True)
-    print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price.round(2)}€')
+    total_price = Decimal(total_price).quantize(Decimal('.01'))
+    print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price}€')
         
     if total_na_rows > 0:
         print('Warning Missing Prices !')
@@ -364,7 +447,8 @@ def update_missing():
     now = datetime.now()
     last_checked = now.strftime("%Y-%m-%d %H:%M:%S")
     total_price = df['Price'].sum(skipna=True)
-    print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price.round(2)}€')
+    total_price = Decimal(total_price).quantize(Decimal('.01'))
+    print(f'Your Binder has in total {total_cards} cards and its total value now is {total_price}€')
         
     if total_na_rows > 0:
         print('Warning Missing Prices !')
@@ -385,16 +469,7 @@ def update_missing():
     pass
 
         
-#Function 6
-# Calculate total binder value
-
-def calculate_binder_price():
-    df = pd.read_excel(excel_path)
-    total_price = df['Price'].sum(skipna=True)
-    print('')
-    print(f'The Total Value of your binder is {total_price.round(2)}€') 
-    pass
-    
+   
 #Function 5
 # Display top 10 most expensive cards
 
@@ -406,6 +481,19 @@ def show_top_10_expensive_cards():
     print(top_10)
     pass
 
+
+#Function 6
+# Calculate total binder value
+
+def calculate_binder_price():
+    df = pd.read_excel(excel_path)
+    total_price = df['Price'].sum(skipna=True)
+    print('')
+    print(f'The Total Value of your binder is {total_price.round(2)}€') 
+    pass
+
+
+
 now = datetime.now()
 #custom_fig = Figlet(font='cybermedium')
 print("*********************************************************")
@@ -415,7 +503,7 @@ print("*                                                       *")
 print("*                       PokeBinder                      *")
 #print(custom_fig.renderText('  PokeBinder'))              
 print("*                                                       *")
-print("*                         v1.1                          *")
+print("*                         v1.2                          *")
 print("*                Made by ConstantineVac                 *")
 print("*                                                       *")
 print("*                                                       *")
@@ -475,6 +563,14 @@ excel_path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx")])
 # Load the Excel file into a pandas dataframe
 try:
     df = pd.read_excel(excel_path)
+    # check if the DataFrame has the required columns
+    required_columns = ['Card Name', 'Expansion Set', 'Set ID', 'Card Version', 'Rarity', 'Set Number', 'Price', 'Timestamp', 'URL']
+    if not all(column in df.columns for column in required_columns):
+    # if any required column is missing, initialize a new DataFrame with these columns
+        df_new = pd.DataFrame(columns=required_columns)
+    # concatenate the new DataFrame with the existing DataFrame
+        df = pd.concat([df_new, df], ignore_index=True)
+    
     print("")
     print(f"* Successfully loaded {os.path.basename(excel_path)}. *")
     print("")
@@ -485,8 +581,8 @@ if len(df) == 0 :
     df['Timestamp'] = df['Timestamp'].astype(str)
 
     # Insert new timestamp value
-    index = 0
-    df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    #index = 0
+    #df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
 
@@ -494,10 +590,10 @@ if len(df) == 0 :
 
 #Binder Info.
 total_cards = len(df)
+total_price = df['Price'].sum(skipna=True)
+if total_cards != 0 and total_price >0:
 
-if total_cards != 0:
-
-    total_price = df['Price'].sum(skipna=True)
+    
     total_na_rows = df["Price"].isna().sum()
     print("")
     print("")
@@ -536,7 +632,7 @@ while True:
     print("Enter 'exit' to quit the program")
     print("")
     print("")
-    choice = input("Please enter your choice (1/2/3/4/5/6 or exit): ")
+    choice = input("Please enter your choice (1/2/3/4/5/6 or exit):")
     
     if choice == '1':
         main()
