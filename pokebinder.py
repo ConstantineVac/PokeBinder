@@ -54,7 +54,7 @@ def add_cards():
 
     while True:    
         card_version = input("Please enter the card version (ex.V1 or None):").strip()
-        if card_version.isalnum() and card_version.startswith('V') | card_version.startswith('v'):
+        if card_version.isalnum() and card_version.startswith('V') or card_version.startswith('v'):
             card_version = card_version.upper()
             break
         
@@ -256,7 +256,7 @@ def both():
 
     while True:    
         card_version = input("Please enter the card version (ex.V1 or None):").strip()
-        if card_version.isalnum() and card_version.startswith('V') | card_version.startswith('v'):
+        if card_version.isalnum() and card_version.startswith('V') or card_version.startswith('v'):
             card_version = card_version.upper()
             break
         
@@ -474,6 +474,7 @@ def update_missing():
 # Display top 10 most expensive cards
 
 def show_top_10_expensive_cards():
+    global df
     #top = df.sort_values(by='Price', ascending=False).head(10)
     top_10 = top_10 = df.nlargest(10, 'Price')[['Card Name', 'Price']]
     print('')
@@ -486,24 +487,94 @@ def show_top_10_expensive_cards():
 # Calculate total binder value
 
 def calculate_binder_price():
+    
     df = pd.read_excel(excel_path)
     total_price = df['Price'].sum(skipna=True)
     print('')
     print(f'The Total Value of your binder is {total_price.round(2)}€') 
     pass
 
+#Function 7
+# Update Missing Rarity
+def update_rarity():
+    total_cards = len(df)
+    rows_missing_rarity = df[df['Rarity'].isna()]
+    mis_count = df['Rarity'].isna().sum()
+    print(f'There are {mis_count} card/s missing rarity/ies')
+    print("* Do you want to update 'All' or 'Missing' Rarities only ?")
+    while True:
+        choice7 = input("Update 'all' or 'missing' or 'exit' :").lower()
+    
+        if choice7 == 'all':
+            print("Updating Card Rarities:") 
+            with tqdm(total=total_cards) as pbar:
+                for index,row in df.iterrows():
+                    url = row['URL']
+                    response = requests.get(url)
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    rarity_element = soup.find('dt', string='Rarity')
+                    rarity_span = rarity_element.find_next_sibling('dd').find('span')
+                    rarity = rarity_span['data-original-title']
+                    df.at[index, 'Rarity'] = rarity
+                    pbar.update(1)
+            
+            df.to_excel(excel_path, index=False)
+            print("\nRarities updated successfully!")
+            print("")
+            break
+        elif choice7 == 'missing' and mis_count == 0:
+            print('')
+            print('All cards have Rarities, If necessary update all')
+            
+        elif choice7 == 'missing':
+            print("Updating Missing Card Rarities:") 
+            with tqdm(total=mis_count) as pbar:
+                for index,row in rows_missing_rarity.iterrows():
+                    url = row['URL']
+                    response = requests.get(url)
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    rarity_element = soup.find('dt', string='Rarity')
+                    rarity_span = rarity_element.find_next_sibling('dd').find('span')
+                    rarity = rarity_span['data-original-title']
+                    df.at[index, 'Rarity'] = rarity
+                    pbar.update(1)
+            
+            df.to_excel(excel_path, index=False)
+            print("\nRarities updated successfully!")
+            print("")
+            break
+            
+        elif choice7 == 'exit':
+            print('Aborting Rarity Update...')
+            break
+        
+        else:    
+            print("Type either 'all' or 'missing'!")
+    pass
+# Function 8
+# Rarities Summary
+def rarity_sum():
 
+    df = pd.read_excel(excel_path)
+    # Group the DataFrame by the 'Rarity' column and count the number of cards for each rarity
+    rarity_counts = df.groupby('Rarity')['Card Name'].count()
+    
+    # Print the rarity counts
+    print(f"Rarity Counts of {total_cards} cards:")
+    for rarity, count in rarity_counts.items():
+        print(f"{rarity}: {count}")
+    pass
 
 now = datetime.now()
-#custom_fig = Figlet(font='cybermedium')
+custom_fig = Figlet(font='cybermedium')
 print("*********************************************************")
 print("*                                                       *")
 print("*                  Thank you for using                  *")
 print("*                                                       *")
-print("*                       PokeBinder                      *")
-#print(custom_fig.renderText('  PokeBinder'))              
+#print("*                       PokeBinder                      *")
+print(custom_fig.renderText('  PokeBinder'))              
 print("*                                                       *")
-print("*                         v1.2                          *")
+print("*                         v1.3                          *")
 print("*                Made by ConstantineVac                 *")
 print("*                                                       *")
 print("*                                                       *")
@@ -543,6 +614,14 @@ def main():
                            
     elif choice == '6':
         calculate_binder_price()
+        df = pd.read_excel(excel_path)
+        
+    elif choice == '7':
+        update_rarity()
+        df = pd.read_excel(excel_path)
+        
+    elif choice == '8':
+        rarity_sum()
         df = pd.read_excel(excel_path)
 
 
@@ -623,16 +702,18 @@ input("Press Enter to continue...")
 while True:
     print("\nWhat would you like to do today?")
     print("**********************************")
-    print("1. Add a new card entry")
-    print("2. Update card prices")
-    print("3. Add new card entry and update prices")
-    print("4. Update only missing card prices")
-    print("5. Show Top 10 Most Expensive Cards")
+    print("1. Add NEW cards")
+    print("2. Update ALL card prices")
+    print("3. Add New cards and update ALL prices")
+    print("4. Update ONLY missing card prices")
+    print("5. Show Top10 Most Expensive Cards")
     print("6. Show Total Binder Value")
+    print("7. Update Rarities")
+    print("8. Count Rarities")
     print("Enter 'exit' to quit the program")
     print("")
     print("")
-    choice = input("Please enter your choice (1/2/3/4/5/6 or exit):")
+    choice = input("Please enter your choice (1/.../8 or exit):")
     
     if choice == '1':
         main()
@@ -651,7 +732,12 @@ while True:
     
     elif choice == '6':
         main()
+
+    elif choice == '7':
+        main()
         
+    elif choice == '8':
+        main()
     
     elif choice.lower()=='exit':
         #Exit the program
