@@ -6,13 +6,15 @@ A tool for retrieving data and prices for your Pokemon TCG Collection.
 
 ### Prerequisites
 
-List any prerequisites or requirements that users need to have installed before they can use your project.
+- Pythom 3.10 or higher
+- Internet Connection
+- An excel file 
 
 ### Installation
 
-Provide installation instructions for your project, including any necessary commands or scripts.
+- Windows Executable (portable) file. No installation required
 
-## Usage
+## Functions and Features
 
 This project requires an excel file that has stored in it Card Name, Expansion Set and Collector's Number of the cards. Then using the Pokemon TCG Api, it retrieves market average price from TCG Player's real-time database and stores it inside the excel file. You can also retrieve the specific Set-ID and your card's rarities. 
 
