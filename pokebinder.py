@@ -13,6 +13,15 @@ import pyfiglet
 from pyfiglet import Figlet
 import re
 from decimal import Decimal
+from pokemontcgsdk import Card
+from pokemontcgsdk import Set
+from pokemontcgsdk import Type
+from pokemontcgsdk import Supertype
+from pokemontcgsdk import Subtype
+from pokemontcgsdk import Rarity
+from pokemontcgsdk import RestClient
+
+RestClient.configure('4c235c05-986e-4dd8-bdbe-493097130446')
 
 global df
 global total_cards
@@ -22,13 +31,18 @@ df = None
 total_cards = 0
 total_price = 0
 
+
+        
+
+    
+
 #Function1 : Add Cards
 # Option 1: Add new card entry
 #ask number of the same car
 def add_cards():
     global df
     global total_cards
-
+    set_id = None
        
     # Get card info from user
     while True:
@@ -44,75 +58,41 @@ def add_cards():
             break
         else:
             print("Please enter a valid card name containing only letters and spaces.")
-        
+
     while True:
         set_name = input("Please enter the expansion set(ex.Lost Origin): ").strip()
-        if all(s.isalpha() or s.isspace() for s in set_name):
+        if all(s.isalpha() or s.isspace() for s in set_name ):
+            set_name = set_name
+            print(set_name)
             break
-        else:
-            print("Please enter a valid set name containing only letters and spaces.")
-
-    while True:    
-        card_version = input("Please enter the card version (ex.V1 or None):").strip()
-        if card_version.isalnum() and card_version.startswith('V') or card_version.startswith('v'):
-            card_version = card_version.upper()
-            break
-        
-        elif card_version == 'None' or card_version == 'NONE' or card_version == 'none':
-            card_version = 'None'
-            break
-        
-        else:
-            print("Please enter a valid card version")
-
-    while True:    
-        set_id = input("Please enter the set ID (ex.LOR): ").strip()
-        if set_id.isalpha():
-            set_id = set_id.upper()
-            break
-        
-        else:
-            print("Please enter a valid set ID")
-        
+            
     while True:
-        card_number = input("Please enter the card number (up to 3 digits ): ")
-        if re.match("^[0-9]{1,3}$", card_number):
+        card_number = input("Please enter the card number (up to 3 digits or TG01/GG20): ")
+        if re.match("^\d{1,3}$|^[A-Z]{2}\d{2}$|^[A-Z]{2}\d{3}$", card_number):
             break
-        
         else:
-            print("Please enter a valid card number containing max 3 digits.")
-        
+            print("Please enter a valid card number containing up to 3 digits or a 2-letter code followed by 2 or 3 digits.")
+                          
+    print("Fetching Card Info from your INPUTS. Please wait...")        
+    for index, row in df.iterrows():
+                card_name = f'"{row["Card Name"]}"'
+                set_number = row["Set Number"]
+                set_name = f'"{row["Expansion Set"]}"'
+                query = f'name:{card_name} number:{set_number} set.name:{set_name}'
+                results = Card.where(q=query)
+
+                # Update the 'Price' and 'Timestamp' values in the DataFrame
+                if results:
+                    set_id = results[0].set.ptcgoCode
+                    #rarity = results[0].rarity
+                    df.at[index, 'Set ID'] = set_id
+                    #df.at[index, 'Rarity'] = rarity
+                    
     # Add new row to DataFrame
     for i in range(num_cards):
-        new_rows = [{'Card Name': card_name.replace('_V', ' V'), 'Expansion Set': set_name.replace(' ', '-'), 'Set ID': set_id.upper(), 'Card Version': card_version, 'Set Number': card_number.zfill(3)}]
+        new_rows = [{'Card Name': card_name.replace('"', ''), 'Expansion Set': set_name.replace('"', ''), 'Set ID': set_id.replace('"', ''), 'Set Number': card_number}]
         df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True,)
-        while True:
-            opt = input(f"({i+1}/{num_cards})Do you want to generate the URL automatically? (y/n)").lower()
-            
-            if opt == 'y':
-                # Generate URL and add to DataFrame
-                card_version = df.at[df.index[-1], 'Card Version']
-                card_number = str(int(df.at[df.index[-1], 'Set Number'])).zfill(3)
-                set_id = df.at[df.index[-1], 'Set ID']
-                set_name = df.at[df.index[-1], 'Expansion Set']
         
-                # Construct cardmarket URL
-                if card_version=='None':
-                    card_version_str = ''
-                else:
-                    card_version_str = f'{card_version}-'
-            
-                url = f"https://www.cardmarket.com/en/Pokemon/Products/Singles/{set_name}/{card_name.replace(' ', '-')}-{card_version_str}{set_id.replace(' ','')}{card_number}"
-                df.at[df.index[-1], 'URL'] = url
-                break
-            
-            elif opt == 'n':
-                # ask the user to enter the URL manually
-                url = input(f"Please enter the card URL({i+1}/{num_cards}): ").strip().rstrip('\n')
-                df.at[df.index[-1], 'URL'] = url
-                break
-            else:
-                print("Please enter 'y' or 'n' to choose whether to generate the URL automatically or enter it manually.")
 
     # Save changes to Excel file
     df.to_excel(excel_path, index=False)
@@ -151,46 +131,25 @@ def add_cards():
 
 
 #Function 2 Update Card Prices 
-#Update Cards Prices using CardMarket's 7-day average!
+#Update Cards Prices using TCG Player AVG Price.
 def update_card_prices():
     global df
     global total_cards
     try:    
-        print("\nCard prices will be updated based on the cardmarket.com 7-day average.")    
-        #total_cards = df.shape[0]
-        #completed_cards = 0
-    
+        print("\nRetrieving Card Prices based on TCG Player API.")    
         print("Updating Prices:") 
         with tqdm(total=total_cards) as pbar:
-            for index,row in df.iterrows():
-                card_name = row['Card Name']
-                set_name = row['Expansion Set']
-                set_id = row['Set ID']
-                card_version = row['Card Version']
-                card_number = row['Set Number']  
-    
-                # Extract the URL for the card from the DataFrame
-                url = row['URL']
+            for index, row in df.iterrows():
+                card_name = f'"{row["Card Name"]}"'
+                set_number = row["Set Number"]
+                set_name = f'"{row["Expansion Set"]}"'
+                query = f'name:{card_name} number:{set_number} set.name:{set_name}'
+                results = Card.where(q=query)
 
-                # Make a GET request to the URL and parse the HTML with BeautifulSoup
-                response = requests.get(url)
-                soup = BeautifulSoup(response.content, 'html.parser')
-    
-                # Find the 'dd' element containing the 7-day average price
-                avg_price_dt = soup.find('dt', string='7-days average price')
-                avg_price_dd = avg_price_dt.find_next_sibling('dd')
-                price_span = avg_price_dd.find('span')
-                avg_7_day_price = price_span.text.strip()
-    
-                # Remove and Replace both comma and euro sign
-                avg_7_day_price_nosign = avg_7_day_price.replace("€", "").strip()
-                avg_7_day_price_comma = avg_7_day_price_nosign.replace(",", '.').strip()
-                avg_7_day_float_price = float(avg_7_day_price_comma)
-            
-    
-    
                 # Update the 'Price' and 'Timestamp' values in the DataFrame
-                df.at[index, 'Price'] = avg_7_day_float_price
+                if results:
+                    avg_price = results[0].cardmarket.prices.averageSellPrice
+                    df.at[index, 'Price'] = avg_price
                 df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 pbar.update(1)
         
@@ -227,172 +186,7 @@ def update_card_prices():
 
 
 
-#Function 3: Add new card entry and update prices
-def both():
-    
-    global df
-    global total_cards
-    # Get card info from user
-    while True:
-        try:
-            num_cards = int(input("How many duplicates would you like to add? "))
-            break
-        except ValueError:
-            print("Please enter a valid number.")
-    
-    while True:
-        card_name = input("Please enter the card name (as written on the card): ").strip().replace('_V',' V')
-        if all(c.isalpha() or c.isspace() for c in card_name):
-            break
-        else:
-            print("Please enter a valid card name containing only letters and spaces.")
-        
-    while True:
-        set_name = input("Please enter the expansion set(ex.Lost Origin): ").strip()
-        if all(s.isalpha() or s.isspace() for s in set_name):
-            break
-        else:
-            print("Please enter a valid set name containing only letters and spaces.")
-
-    while True:    
-        card_version = input("Please enter the card version (ex.V1 or None):").strip()
-        if card_version.isalnum() and card_version.startswith('V') or card_version.startswith('v'):
-            card_version = card_version.upper()
-            break
-        
-        elif card_version == 'None' or card_version == 'NONE' or card_version == 'none':
-            card_version = 'None'
-            break
-        
-        else:
-            print("Please enter a valid card version")
-
-    while True:    
-        set_id = input("Please enter the set ID (ex.LOR): ").strip()
-        if set_id.isalpha():
-            set_id = set_id.upper()
-            break
-        
-        else:
-            print("Please enter a valid set ID")
-        
-    while True:
-        card_number = input("Please enter the card number (up to 3 digits ): ")
-        if re.match("^[0-9]{1,3}$", card_number):
-            break
-        
-        else:
-            print("Please enter a valid card number containing max 3 digits.")
-        
-    # Add new row to DataFrame
-    for i in range(num_cards):
-        new_rows = [{'Card Name': card_name.replace('_V', ' V'), 'Expansion Set': set_name.replace(' ', '-'), 'Set ID': set_id.upper(), 'Card Version': card_version, 'Set Number': card_number.zfill(3)}]
-        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True,)
-        while True:
-            opt = input(f"({i+1}/{num_cards})Do you want to generate the URL automatically? (y/n)").lower()
-            
-            if opt == 'y':
-                # Generate URL and add to DataFrame
-                card_version = df.at[df.index[-1], 'Card Version']
-                card_number = str(int(df.at[df.index[-1], 'Set Number'])).zfill(3)
-                set_id = df.at[df.index[-1], 'Set ID']
-                set_name = df.at[df.index[-1], 'Expansion Set']
-        
-                # Construct cardmarket URL
-                if card_version=='None':
-                    card_version_str = ''
-                else:
-                    card_version_str = f'{card_version}-'
-            
-                url = f"https://www.cardmarket.com/en/Pokemon/Products/Singles/{set_name}/{card_name.replace(' ', '-')}-{card_version_str}{set_id.replace(' ','')}{card_number}"
-                df.at[df.index[-1], 'URL'] = url
-                break
-            
-            elif opt == 'n':
-                # ask the user to enter the URL manually
-                url = input(f"Please enter the card URL({i+1}/{num_cards}): ").strip().rstrip('\n')
-                df.at[df.index[-1], 'URL'] = url
-                break
-            else:
-                print("Please enter 'y' or 'n' to choose whether to generate the URL automatically or enter it manually.")
-
-    # Save changes to Excel file
-    df.to_excel(excel_path, index=False)
-    print("\nNew card entry has been added to the Excel file!")
-    print("")
-    print("\n Now Card prices will be updated based on the cardmarket.com 7-day average.")
-    print("")
-    print("")
-    print("Updating Prices:") 
-    with tqdm(total=total_cards+num_cards) as pbar:
-        for index,row in df.iterrows():
-            card_name = row['Card Name']
-            set_name = row['Expansion Set']
-            set_id = row['Set ID']
-            card_version = row['Card Version']
-            card_number = row['Set Number']  
-    
-            # Extract the URL for the card from the DataFrame
-            url = row['URL']
-
-            # Make a GET request to the URL and parse the HTML with BeautifulSoup
-            response = requests.get(url)
-            soup = BeautifulSoup(response.content, 'html.parser')
-    
-            # Find the 'dd' element containing the 7-day average price
-            avg_price_dt = soup.find('dt', string='7-days average price')
-            avg_price_dd = avg_price_dt.find_next_sibling('dd')
-            price_span = avg_price_dd.find('span')
-            avg_7_day_price = price_span.text.strip()
-    
-            # Remove and Replace both comma and euro sign
-            avg_7_day_price_nosign = avg_7_day_price.replace("€", "").strip()
-            avg_7_day_price_comma = avg_7_day_price_nosign.replace(",", '.').strip()
-            avg_7_day_float_price = float(avg_7_day_price_comma)
-            
-    
-    
-            # Update the 'Price' and 'Timestamp' values in the DataFrame
-            df.at[index, 'Price'] = avg_7_day_float_price
-            df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            pbar.update(1)
-        
-        # Save the updated data back to the Excel file
-        df.to_excel(excel_path, index=False)
-        print("\nPrices updated successfully!")
-        
-    
-    
-    #Binder Status Info after the new entries
-    total_cards = len(df)
-    total_na_rows = df["Price"].isna().sum()
-    now = datetime.now()
-    last_checked = now.strftime("%Y-%m-%d %H:%M:%S")
-    total_price = df['Price'].sum(skipna=True)
-    total_price = Decimal(total_price).quantize(Decimal('.01'))
-    print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price}€')
-        
-    if total_na_rows > 0:
-        print('Warning Missing Prices !')
-        if total_na_rows == 1:
-            print(f'There was found {total_na_rows} card with missing price')
-            print("")
-            print('It is suggested that you run Option 2 in order to retrieve missing price!')
-            nan_card_names = df.loc[df['Price'].isna(), 'Card Name'].reset_index()
-            print(nan_card_names)
-        else:
-            print(f'There were found {total_na_rows} cards with missing prices')
-            print("")
-            print('It is suggested that you run Option 2 in order to retrieve missing prices!')
-            nan_card_names = df.loc[df['Price'].isna(), 'Card Name'].reset_index()
-            print(nan_card_names)
-    print(last_checked)
-        
-    pass
-
-
-
-#4 Update only cards with missing card values!
+#3 Update only cards with missing card values!
 def update_missing():
     global df
     global total_cards
@@ -405,40 +199,23 @@ def update_missing():
     # Update missing prices
     with tqdm(total=total_cards) as pbar:
         for index, row in rows_missing_price.iterrows():
-            card_name = row['Card Name']
-            set_name = row['Expansion Set']
-            set_id = row['Set ID']
-            card_version = row['Card Version']
-            card_number = row['Set Number']  
-    
-            # Extract the URL for the card from the DataFrame
-            url = row['URL']
+            card_name = f'"{row["Card Name"]}"'
+            set_number = row["Set Number"]
+            set_name = f'"{row["Expansion Set"]}"'
+            query = f'name:{card_name} number:{set_number} set.name:{set_name}'
+            results = Card.where(q=query)
 
-            # Make a GET request to the URL and parse the HTML with BeautifulSoup
-            response = requests.get(url)
-            soup = BeautifulSoup(response.content, 'html.parser')
-    
-            # Find the 'dd' element containing the 7-day average price
-            avg_price_dt = soup.find('dt', string='7-days average price')
-            avg_price_dd = avg_price_dt.find_next_sibling('dd')
-            price_span = avg_price_dd.find('span')
-            avg_7_day_price = price_span.text.strip()
-    
-            # Remove and Replace both comma and euro sign
-            avg_7_day_price_nosign = avg_7_day_price.replace("€", "").strip()
-            avg_7_day_price_comma = avg_7_day_price_nosign.replace(",", '.').strip()
-            avg_7_day_float_price = float(avg_7_day_price_comma)
-            
-    
-    
             # Update the 'Price' and 'Timestamp' values in the DataFrame
-            df.at[index, 'Price'] = avg_7_day_float_price
-            df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            pbar.update(1)
-        
+            if results:
+                avg_price = results[0].cardmarket.prices.averageSellPrice
+                df.at[index, 'Price'] = avg_price
+                df.at[index, 'Timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                pbar.update(1)
+            
     # Save the updated data back to the Excel file
     df.to_excel(excel_path, index=False)
     print("\nPrices updated successfully!")
+
     
     
     #Binder Status Info after the new entries
@@ -448,7 +225,7 @@ def update_missing():
     last_checked = now.strftime("%Y-%m-%d %H:%M:%S")
     total_price = df['Price'].sum(skipna=True)
     total_price = Decimal(total_price).quantize(Decimal('.01'))
-    print(f'Your Binder has in total {total_cards} cards and its total value now is {total_price}€')
+    print(f'Your Binder has in total {total_cards} cards and its total value now is ${total_price}')
         
     if total_na_rows > 0:
         print('Warning Missing Prices !')
@@ -470,7 +247,7 @@ def update_missing():
 
         
    
-#Function 5
+#Function 4
 # Display top 10 most expensive cards
 
 def show_top_10_expensive_cards():
@@ -483,7 +260,7 @@ def show_top_10_expensive_cards():
     pass
 
 
-#Function 6
+#Function 5
 # Calculate total binder value
 
 def calculate_binder_price():
@@ -491,10 +268,10 @@ def calculate_binder_price():
     df = pd.read_excel(excel_path)
     total_price = df['Price'].sum(skipna=True)
     print('')
-    print(f'The Total Value of your binder is {total_price.round(2)}€') 
+    print(f'The Total Value of your binder is ${total_price.round(2)}') 
     pass
 
-#Function 7
+#Function 6
 # Update Missing Rarity
 def update_rarity():
     total_cards = len(df)
@@ -507,21 +284,25 @@ def update_rarity():
     
         if choice7 == 'all':
             print("Updating Card Rarities:") 
-            with tqdm(total=total_cards) as pbar:
-                for index,row in df.iterrows():
-                    url = row['URL']
-                    response = requests.get(url)
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    rarity_element = soup.find('dt', string='Rarity')
-                    rarity_span = rarity_element.find_next_sibling('dd').find('span')
-                    rarity = rarity_span['data-original-title']
-                    df.at[index, 'Rarity'] = rarity
-                    pbar.update(1)
-            
+            with tqdm(total=total_cards) as pbar:       
+                for index, row in df.iterrows():
+                    card_name = f'"{row["Card Name"]}"'
+                    set_number = row["Set Number"]
+                    set_name = f'"{row["Expansion Set"]}"'
+                    query = f'name:{card_name} number:{set_number} set.name:{set_name}'
+                    results = Card.where(q=query)
+                                                     
+                    # Update Rarities
+                    if results:
+                        rarity = results[0].rarity
+                        df.at[index, 'Rarity'] = rarity
+                                                     
+                    pbar.update(1)                     
             df.to_excel(excel_path, index=False)
             print("\nRarities updated successfully!")
             print("")
             break
+
         elif choice7 == 'missing' and mis_count == 0:
             print('')
             print('All cards have Rarities, If necessary update all')
@@ -530,15 +311,16 @@ def update_rarity():
             print("Updating Missing Card Rarities:") 
             with tqdm(total=mis_count) as pbar:
                 for index,row in rows_missing_rarity.iterrows():
-                    url = row['URL']
-                    response = requests.get(url)
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    rarity_element = soup.find('dt', string='Rarity')
-                    rarity_span = rarity_element.find_next_sibling('dd').find('span')
-                    rarity = rarity_span['data-original-title']
-                    df.at[index, 'Rarity'] = rarity
-                    pbar.update(1)
-            
+                    card_name = f'"{row["Card Name"]}"'
+                    set_number = row["Set Number"]
+                    set_name = f'"{row["Expansion Set"]}"'
+                    query = f'name:{card_name} number:{set_number} set.name:{set_name}'
+                    results = Card.where(q=query)
+                    # Update Rarities
+                    if results:
+                        rarity = results[0].rarity
+                        df.at[index, 'Rarity'] = rarity
+                        pbar.update(1)    
             df.to_excel(excel_path, index=False)
             print("\nRarities updated successfully!")
             print("")
@@ -551,7 +333,9 @@ def update_rarity():
         else:    
             print("Type either 'all' or 'missing'!")
     pass
-# Function 8
+
+
+# Function 7
 # Rarities Summary
 def rarity_sum():
 
@@ -571,10 +355,9 @@ print("*********************************************************")
 print("*                                                       *")
 print("*                  Thank you for using                  *")
 print("*                                                       *")
-#print("*                       PokeBinder                      *")
 print(custom_fig.renderText('  PokeBinder'))              
 print("*                                                       *")
-print("*                         v1.3                          *")
+print("*                         v1.4                          *")
 print("*                Made by ConstantineVac                 *")
 print("*                                                       *")
 print("*                                                       *")
@@ -601,26 +384,22 @@ def main():
         df = pd.read_excel(excel_path)
         
     elif choice == '3':
-        both()
-        df = pd.read_excel(excel_path)
-        
-    elif choice == '4':
         update_missing()
         df=pd.read_excel(excel_path)
 
-    elif choice == '5':
+    elif choice == '4':
         show_top_10_expensive_cards()
         df = pd.read_excel(excel_path)
                            
-    elif choice == '6':
+    elif choice == '5':
         calculate_binder_price()
         df = pd.read_excel(excel_path)
         
-    elif choice == '7':
+    elif choice == '6':
         update_rarity()
         df = pd.read_excel(excel_path)
         
-    elif choice == '8':
+    elif choice == '7':
         rarity_sum()
         df = pd.read_excel(excel_path)
 
@@ -628,7 +407,7 @@ def main():
 
 # Greet the user and ask for the Excel file
 
-print("   Welcome to the Pokemon Card Market Price Checker!")
+print("   Welcome to Pokemon Binder. Your Pokemon TCG Price Tool!")
 print("")
 print("Please select your Excel file containing your card information.")
 print("")
@@ -676,7 +455,7 @@ if total_cards != 0 and total_price >0:
     total_na_rows = df["Price"].isna().sum()
     print("")
     print("")
-    print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is {total_price.round(2)}€')
+    print(f'Your Binder has in total {total_cards} cards and its last time total value, since last update is ${total_price.round(2)}')
     print("")
     print("")
     if total_na_rows > 0:
@@ -695,6 +474,9 @@ else:
     total_price = 0
     print("You don't have any cards yet :(")
 
+print("")    
+print("")
+
 input("Press Enter to continue...")
 
 
@@ -704,12 +486,11 @@ while True:
     print("**********************************")
     print("1. Add NEW cards")
     print("2. Update ALL card prices")
-    print("3. Add New cards and update ALL prices")
-    print("4. Update ONLY missing card prices")
-    print("5. Show Top10 Most Expensive Cards")
-    print("6. Show Total Binder Value")
-    print("7. Update Rarities")
-    print("8. Count Rarities")
+    print("3. Update ONLY missing card prices")
+    print("4. Show Top10 Most Expensive Cards")
+    print("5. Show Total Binder Value")
+    print("6. Update Rarities")
+    print("7. Count Rarities")
     print("Enter 'exit' to quit the program")
     print("")
     print("")
@@ -734,9 +515,6 @@ while True:
         main()
 
     elif choice == '7':
-        main()
-        
-    elif choice == '8':
         main()
     
     elif choice.lower()=='exit':
