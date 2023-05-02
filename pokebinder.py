@@ -21,7 +21,7 @@ from pokemontcgsdk import Subtype
 from pokemontcgsdk import Rarity
 from pokemontcgsdk import RestClient
 
-RestClient.configure('4c235c05-986e-4dd8-bdbe-493097130446')
+RestClient.configure('Your_API_Key')
 
 global df
 global total_cards
